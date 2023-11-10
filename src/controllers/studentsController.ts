@@ -1,33 +1,37 @@
 import { Response, Request, NextFunction } from "express";
 import Student from "../models/Student";
-import { createDbConnection } from "../db/dbConfig";
+import { initializeDatabase } from "../db/dbConfig";
 import { Database } from "sqlite3";
+import createError from "http-errors";
 import logger from "../services/logger";
 
-let db: Database = createDbConnection();
+let dbPromise = initializeDatabase();
 
 const studentsRoot = (req: Request, res: Response, next: NextFunction) => {
     res.sendStatus(201);
-}
+};
 
-const studentsList = (req: Request, res: Response) => {
-    let studentsList: Student[] = [];
+const studentsListHandler = async () => {
+    const db = await dbPromise;
 
-    let sql = `SELECT * FROM students`;
-
-    db.all(sql, [], (error: Error, rows: Student[]) => {
-        if (error) {
-            logger.error(error.message);
-            res.send(error.message);
-        }
-        rows.forEach((row: Student) => { studentsList.push(row) });
-        logger.info(req);
-        res.send(studentsList);
+    try {
+        const students: Student = await db.all(`SELECT * from students`);
+        return students;
+    } catch (error) {
+        throw createError.InternalServerError;
     }
-    );
-}
+};
 
-const studentsListByYearAndRoom = (req: Request, res: Response) => {
+const studentsList = async (req: Request, res: Response) => {
+    try {
+        const studentsList = await studentsListHandler();
+        res.send(studentsList);
+    } catch (error) {
+        res.status(500).send(error);
+    }
+};
+
+const studentsListByYearAndRoom = async (req: Request, res: Response) => {
     logger.info(req);
     let studentsList: Student[] = [];
     let year = req.query.year;
@@ -35,25 +39,28 @@ const studentsListByYearAndRoom = (req: Request, res: Response) => {
 
     let sql = `SELECT * FROM students WHERE year="${year}" AND room="${room}"`;
 
+    const db = await dbPromise;
     db.all(sql, [], (error: Error, rows: Student[]) => {
         if (error) {
             res.send(error.message);
         }
         if (rows.length > 0) {
-            rows.forEach((row: Student) => { studentsList.push(row) });
+            rows.forEach((row: Student) => {
+                studentsList.push(row);
+            });
             res.send(studentsList);
         } else {
             res.send("Os parâmetros apresentados não rertonaram resultado.");
         }
+    });
+};
 
-    })
-}
-
-const studentDetailsByQuery = (req: Request, res: Response) => {
+const studentDetailsByQuery = async (req: Request, res: Response) => {
     logger.info(req);
     let id = req.query.id;
     let sql = `SELECT * FROM students WHERE id="${id}"`;
 
+    const db = await dbPromise;
     db.all(sql, [], (error: Error, rows: Student[]) => {
         if (error) {
             res.send(error.message);
@@ -63,16 +70,16 @@ const studentDetailsByQuery = (req: Request, res: Response) => {
         } else {
             res.send("Estudante não existe");
         }
+    });
+};
 
-    }
-    );
-}
-
-const studentDetailsByParams = (req: Request, res: Response) => {
+const studentDetailsByParams = async (req: Request, res: Response) => {
     logger.info(req);
     let id = req.params.id;
     let sql = `SELECT * FROM students WHERE id="${id}"`;
 
+    const db = await dbPromise;
+
     db.all(sql, [], (error: Error, rows: Student[]) => {
         if (error) {
             res.send(error.message);
@@ -82,42 +89,38 @@ const studentDetailsByParams = (req: Request, res: Response) => {
         } else {
             res.send("Estudante não existe");
         }
+    });
+};
 
-    }
-    );
-}
-
-const addStudent = (req: Request, res: Response) => {
-    logger.info(req);
-
-    let token = req.headers.authorization;
-
-    if (token == "Bearer 12345") {
-        let student: Student = req.body;
-        let roomToUppercase: string = student.room.toUpperCase();
-
-        let sql = `INSERT INTO students(name, shift, year, room) VALUES ("${student.name}", "${student.shift}", "${student.year}", "${roomToUppercase}")`;
-
-        if (student.name && student.shift && student.year && student.room) {
-            db.run(sql,
-                (error: Error) => {
-                    if (error) {
-                        res.end(error.message);
-                    }
-                    res.send(`Student ${student.name} Added`);
-                })
-        } else {
-            res.send("Erro na criação do estudante. Verifique se todos os campos foram preenchidos");
-        }
-    } else {
-        res.sendStatus(403);
+const addStudentHandler = async (student: Student) => {
+    if (!student.name || !student.room || !student.shift || !student.year) {
+        throw createError.BadRequest;
     }
 
+    try {
+        const db = await dbPromise;
+        db.run(
+            `INSERT INTO students(name, shift, year, room) VALUES (?, ?, ?, ?)`,
+            [student.name, student.shift, student.year, student.room]
+        );
+        return true;
+    } catch (error) {
+        throw createError.InternalServerError;
+    }
+};
 
+const addStudent = async (req: Request, res: Response) => {
+    let student: Student = req.body;
 
-}
+    try {
+        addStudentHandler(student);
+        res.status(201).send();
+    } catch (e) {
+        res.send(e);
+    }
+};
 
-const updateStudent = (req: Request, res: Response) => {
+const updateStudent = async (req: Request, res: Response) => {
     logger.info(req);
     let student: Student = req.body;
     let roomToUppercase = student.room.toUpperCase();
@@ -128,6 +131,7 @@ const updateStudent = (req: Request, res: Response) => {
                                    WHERE id="${student.id}"
                                    `;
 
+    const db = await dbPromise;
 
     db.all(sql, [], (error: Error) => {
         if (error) {
@@ -135,49 +139,58 @@ const updateStudent = (req: Request, res: Response) => {
         }
         res.send("Student Updated");
     });
-}
+};
 
-const updateStudentBySpecificField = (req: Request, res: Response) => {
+const updateStudentBySpecificField = async (req: Request, res: Response) => {
     logger.info(req);
     let student: Student = req.body;
     let sql = `UPDATE students SET name="${student.name}"
                                    WHERE id="${student.id}"
-    `
+    `;
+
+    const db = await dbPromise;
+
     db.all(sql, [], (error: Error) => {
         if (error) {
             res.send(error.message);
         }
         res.send("Student Updated");
-    })
-}
+    });
+};
 
-const deleteStudentByQuery = (req: Request, res: Response) => {
+const deleteStudentByQuery = async (req: Request, res: Response) => {
     logger.info(req);
     let id = req.query.id;
     let sql = `DELETE from students WHERE id="${id}"`;
 
+    const db = await dbPromise;
+
     db.all(sql, [], (error: Error) => {
         if (error) {
             res.send(error.message);
         }
         res.send("Student Deleted");
-    })
-}
+    });
+};
 
-const deleteStudentByParams = (req: Request, res: Response) => {
+const deleteStudentByParams = async (req: Request, res: Response) => {
     logger.info(req);
     let id = req.params.id;
     let sql = `DELETE from students WHERE id="${id}"`;
 
+    const db = await dbPromise;
+
     db.all(sql, [], (error: Error) => {
         if (error) {
             res.send(error.message);
         }
         res.send("Student Deleted");
-    })
-}
+    });
+};
 
 export {
+    addStudentHandler,
+    studentsListHandler,
     studentsRoot,
     studentsList,
     studentsListByYearAndRoom,
@@ -187,5 +200,5 @@ export {
     updateStudent,
     updateStudentBySpecificField,
     deleteStudentByQuery,
-    deleteStudentByParams
+    deleteStudentByParams,
 };
