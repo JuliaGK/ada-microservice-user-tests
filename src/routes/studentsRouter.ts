@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { container } from "tsyringe";
 import {
     studentsRoot,
     studentsList,
@@ -9,9 +10,8 @@ import {
     updateStudent,
     deleteStudentByQuery,
     deleteStudentByParams,
-    updateStudentBySpecificField
+    updateStudentBySpecificField,
 } from "../controllers/studentsController";
-
 
 const studentsRouter = Router();
 
@@ -29,12 +29,13 @@ studentsRouter.post("/addStudent", addStudent);
 
 studentsRouter.put("/updateStudent", updateStudent);
 
-studentsRouter.patch("/updateStudentBySpecificField", updateStudentBySpecificField);
+studentsRouter.patch(
+    "/updateStudentBySpecificField",
+    updateStudentBySpecificField
+);
 
 studentsRouter.delete("/deleteStudent", deleteStudentByQuery);
 
 studentsRouter.delete("/deleteStudent/:id", deleteStudentByParams);
-
-
 
 export default studentsRouter;
