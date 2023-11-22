@@ -7,15 +7,15 @@ export class FakeStudentsRepository implements IStudentsRepository {
     async createStudent(student: Student) {
         const newStudent = {
             ...student,
-            id: faker.number.int({ min: 1, max: 2000 }),
+            id: 1,
         };
         this.students.push(newStudent);
         return newStudent;
     }
 
     async deleteStudentById(id: String) {
-        this.students.filter((student) => {
-            return student.id != Number(id);
-        });
+        this.students = this.students.filter(
+            (student) => student.id != Number(id)
+        );
     }
 }
