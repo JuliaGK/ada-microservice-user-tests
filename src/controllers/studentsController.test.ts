@@ -38,9 +38,9 @@ test("Deletar um aluno com injection", async () => {
         year: "6",
     };
 
-    await addStudentHandlerWithInjection(student);
+    const newStudent = await addStudentHandlerWithInjection(student);
 
-    await deleteStudentHandlerWithInjection("1");
+    await deleteStudentHandlerWithInjection(newStudent.id.toString());
 
     expect(true).toBeTruthy();
 });
